@@ -215,7 +215,7 @@ footer {
 
 
 def app_gradio():
-    with gr.Blocks(title="Fashion Outfit", theme="Nymbo/Nymbo_Theme", css=css) as demo:
+    with gr.Blocks(theme="Nymbo/Nymbo_Theme", css=css) as demo:
 
         with gr.Row():
             with gr.Column(scale=1, min_width=350):
