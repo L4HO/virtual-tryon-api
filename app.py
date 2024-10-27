@@ -206,41 +206,17 @@ def submit_function(
 def person_example_fn(image_path):
     return image_path
 
-HEADER = """
-<h1 style="text-align: center;"> 🐈 CatVTON: Concatenation Is All You Need for Virtual Try-On with Diffusion Models </h1>
-<div style="display: flex; justify-content: center; align-items: center;">
-  <a href="http://arxiv.org/abs/2407.15886" style="margin: 0 2px;">
-    <img src='https://img.shields.io/badge/arXiv-2407.15886-red?style=flat&logo=arXiv&logoColor=red' alt='arxiv'>
-  </a>
-  <a href='https://huggingface.co/zhengchong/CatVTON' style="margin: 0 2px;">
-    <img src='https://img.shields.io/badge/Hugging Face-ckpts-orange?style=flat&logo=HuggingFace&logoColor=orange' alt='huggingface'>
-  </a>
-  <a href="https://github.com/Zheng-Chong/CatVTON" style="margin: 0 2px;">
-    <img src='https://img.shields.io/badge/GitHub-Repo-blue?style=flat&logo=GitHub' alt='GitHub'>
-  </a>
-  <a href="http://120.76.142.206:8888" style="margin: 0 2px;">
-    <img src='https://img.shields.io/badge/Demo-Gradio-gold?style=flat&logo=Gradio&logoColor=red' alt='Demo'>
-  </a>
-  <a href="https://huggingface.co/spaces/zhengchong/CatVTON" style="margin: 0 2px;">
-    <img src='https://img.shields.io/badge/Space-ZeroGPU-orange?style=flat&logo=Gradio&logoColor=red' alt='Demo'>
-  </a>
-  <a href='https://zheng-chong.github.io/CatVTON/' style="margin: 0 2px;">
-    <img src='https://img.shields.io/badge/Webpage-Project-silver?style=flat&logo=&logoColor=orange' alt='webpage'>
-  </a>
-  <a href="https://github.com/Zheng-Chong/CatVTON/LICENCE" style="margin: 0 2px;">
-    <img src='https://img.shields.io/badge/License-CC BY--NC--SA--4.0-lightgreen?style=flat&logo=Lisence' alt='License'>
-  </a>
-</div>
-<br>
-· This demo and our weights are only for Non-commercial Use. <br>
-· You can try CatVTON in our <a href="https://huggingface.co/spaces/zhengchong/CatVTON">HuggingFace Space</a> or our <a href="http://120.76.142.206:8888">online demo</a> (run on 3090). <br>
-· Thanks to <a href="https://huggingface.co/zero-gpu-explorers">ZeroGPU</a> for providing A100 for our <a href="https://huggingface.co/spaces/zhengchong/CatVTON">HuggingFace Space</a>. <br>
-· SafetyChecker is set to filter NSFW content, but it may block normal results too. Please adjust the <span>`seed`</span> for normal outcomes.<br> 
+
+css = """
+footer {
+    visibility: hidden;
+}
 """
 
+
 def app_gradio():
-    with gr.Blocks(title="CatVTON") as demo:
-        gr.Markdown(HEADER)
+    with gr.Blocks(title="Fashion Outfit", theme="Nymbo/Nymbo_Theme", css=css) as demo:
+
         with gr.Row():
             with gr.Column(scale=1, min_width=350):
                 with gr.Row():
