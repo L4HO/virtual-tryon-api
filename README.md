@@ -1,5 +1,5 @@
 ---
-title: CatVTON
+title: fashion
 emoji: 🐈
 colorFrom: indigo
 colorTo: blue
