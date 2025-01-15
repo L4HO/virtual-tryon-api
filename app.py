@@ -408,73 +408,72 @@ def app_gradio():
                 result_image = gr.Image(
                     interactive=False,
                     label="Final Result",
-                        elem_classes="image-container"
-                    )
-
-                    with gr.Row():
-                        # Photo Examples
-                        root_path = "resource/demo/example"
-                        with gr.Column():
-                            gr.Markdown("#### 👤 Model Examples")
-                            men_exm = gr.Examples(
-                                examples=[
-                                    os.path.join(root_path, "person", "men", _)
-                                    for _ in os.listdir(os.path.join(root_path, "person", "men"))
-                                ],
-                                examples_per_page=4,
-                                inputs=image_path,
-                                label="Men's Examples",
-                                elem_classes="example-item"
-                            )
-                            women_exm = gr.Examples(
-                                examples=[
-                                    os.path.join(root_path, "person", "women", _)
-                                    for _ in os.listdir(os.path.join(root_path, "person", "women"))
-                                ],
-                                examples_per_page=4,
-                                inputs=image_path,
-                                label="Women's Examples",
-                                elem_classes="example-item"
-                            )
-                            gr.Markdown(
-                                '<div class="info-text">Model examples courtesy of <a href="https://huggingface.co/spaces/levihsu/OOTDiffusion">OOTDiffusion</a> and <a href="https://www.outfitanyone.org">OutfitAnyone</a></div>'
-                            )
-                        
-                        with gr.Column():
-                            gr.Markdown("#### 👕 Clothing Examples")
-                            condition_upper_exm = gr.Examples(
-                                examples=[
-                                    os.path.join(root_path, "condition", "upper", _)
-                                    for _ in os.listdir(os.path.join(root_path, "condition", "upper"))
-                                ],
-                                examples_per_page=4,
-                                inputs=cloth_image,
-                                label="Upper Garments",
-                                elem_classes="example-item"
-                            )
-                            condition_overall_exm = gr.Examples(
-                                examples=[
-                                    os.path.join(root_path, "condition", "overall", _)
-                                    for _ in os.listdir(os.path.join(root_path, "condition", "overall"))
-                                ],
-                                examples_per_page=4,
-                                inputs=cloth_image,
-                                label="Full Outfits",
-                                elem_classes="example-item"
-                            )
-                            condition_person_exm = gr.Examples(
-                                examples=[
-                                    os.path.join(root_path, "condition", "person", _)
-                                    for _ in os.listdir(os.path.join(root_path, "condition", "person"))
-                                ],
-                                examples_per_page=4,
-                                inputs=cloth_image,
-                                label="Reference Styles",
-                                elem_classes="example-item"
-                            )
-                            gr.Markdown(
-                                '<div class="info-text">Clothing examples sourced from various online retailers</div>'
-                            )
+                    elem_classes="image-container"
+                )
+                with gr.Row():
+                    # Photo Examples
+                    root_path = "resource/demo/example"
+                    with gr.Column():
+                        gr.Markdown("#### 👤 Model Examples")
+                        men_exm = gr.Examples(
+                            examples=[
+                                os.path.join(root_path, "person", "men", _)
+                                for _ in os.listdir(os.path.join(root_path, "person", "men"))
+                            ],
+                            examples_per_page=4,
+                            inputs=image_path,
+                            label="Men's Examples",
+                            elem_classes="example-item"
+                        )
+                        women_exm = gr.Examples(
+                            examples=[
+                                os.path.join(root_path, "person", "women", _)
+                                for _ in os.listdir(os.path.join(root_path, "person", "women"))
+                            ],
+                            examples_per_page=4,
+                            inputs=image_path,
+                            label="Women's Examples",
+                            elem_classes="example-item"
+                        )
+                        gr.Markdown(
+                            '<div class="info-text">Model examples courtesy of <a href="https://huggingface.co/spaces/levihsu/OOTDiffusion">OOTDiffusion</a> and <a href="https://www.outfitanyone.org">OutfitAnyone</a></div>'
+                        )
+                    
+                    with gr.Column():
+                        gr.Markdown("#### 👕 Clothing Examples")
+                        condition_upper_exm = gr.Examples(
+                            examples=[
+                                os.path.join(root_path, "condition", "upper", _)
+                                for _ in os.listdir(os.path.join(root_path, "condition", "upper"))
+                            ],
+                            examples_per_page=4,
+                            inputs=cloth_image,
+                            label="Upper Garments",
+                            elem_classes="example-item"
+                        )
+                        condition_overall_exm = gr.Examples(
+                            examples=[
+                                os.path.join(root_path, "condition", "overall", _)
+                                for _ in os.listdir(os.path.join(root_path, "condition", "overall"))
+                            ],
+                            examples_per_page=4,
+                            inputs=cloth_image,
+                            label="Full Outfits",
+                            elem_classes="example-item"
+                        )
+                        condition_person_exm = gr.Examples(
+                            examples=[
+                                os.path.join(root_path, "condition", "person", _)
+                                for _ in os.listdir(os.path.join(root_path, "condition", "person"))
+                            ],
+                            examples_per_page=4,
+                            inputs=cloth_image,
+                            label="Reference Styles",
+                            elem_classes="example-item"
+                        )
+                        gr.Markdown(
+                            '<div class="info-text">Clothing examples sourced from various online retailers</div>'
+                        )
 
             image_path.change(
                 person_example_fn,
