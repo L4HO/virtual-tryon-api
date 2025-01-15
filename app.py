@@ -403,13 +403,11 @@ def app_gradio():
                         value="input & mask & result",
                         elem_classes="radio-group"
                     )
+
             with gr.Column(scale=2, min_width=500):
                 result_image = gr.Image(
                     interactive=False,
                     label="Final Result",
-                    elem_classes="image result_image = gr.Image(
-                        interactive=False,
-                        label="Final Result",
                         elem_classes="image-container"
                     )
 
