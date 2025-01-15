@@ -330,7 +330,7 @@ def app_gradio():
     with gr.Blocks(theme=gr.themes.Soft(primary_hue="green", secondary_hue="blue"), css=css) as demo:
         gr.Markdown(
             """
-            # Virtual Try-On App 👔
+            # 👔 Fashion Fit 
             Transform your look with AI-powered virtual clothing try-on!
             """
         )
@@ -361,13 +361,7 @@ def app_gradio():
                                 elem_classes="image-container"
                             )
                         with gr.Column(scale=1, min_width=120):
-                            gr.Markdown(
-                                """
-                                ### 🎯 Masking Options
-                                1. Draw mask manually with 🖌️
-                                2. Auto-generate based on clothing type
-                                """
-                            )
+ 
                             cloth_type = gr.Radio(
                                 label="Clothing Type",
                                 choices=["upper", "lower", "overall"],
@@ -376,13 +370,7 @@ def app_gradio():
                             )
 
                 submit = gr.Button("🚀 Generate Try-On", elem_classes="primary-button")
-                gr.Markdown(
-                    """
-                    <div class="warning-text">
-                        ⚠️ Please click only once and wait patiently for processing
-                    </div>
-                    """
-                )
+
 
                 with gr.Accordion("⚙️ Advanced Settings", open=False):
                     num_inference_steps = gr.Slider(
@@ -502,18 +490,7 @@ def app_gradio():
                 result_image,
             )
 
-        gr.Markdown(
-            """
-            ### 💡 Tips & Instructions
-            1. Upload or select a person image
-            2. Choose or upload a clothing item
-            3. Select clothing type (upper/lower/overall)
-            4. Adjust advanced settings if needed
-            5. Click Generate and wait for results
-            
-            For best results, use clear, front-facing images with good lighting.
-            """
-        )
+
 
     demo.queue().launch(share=True, show_error=True)
 
