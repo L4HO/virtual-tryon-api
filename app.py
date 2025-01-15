@@ -337,7 +337,6 @@ def app_gradio():
 
         with gr.Row():
             with gr.Column(scale=1, min_width=350):
-                # (수정) 아래 라인을 gr.Box() -> gr.Group()으로 변경
                 with gr.Group():
                     gr.Markdown("### 📸 Upload Images")
                     with gr.Row():
@@ -427,6 +426,7 @@ def app_gradio():
                     root_path = "resource/demo/example"
                     with gr.Column():
                         gr.Markdown("#### 👤 Model Examples")
+                        # elem_classes 인자를 제거해야 오류가 사라집니다.
                         men_exm = gr.Examples(
                             examples=[
                                 os.path.join(root_path, "person", "men", file)
@@ -434,8 +434,7 @@ def app_gradio():
                             ],
                             examples_per_page=4,
                             inputs=image_path,
-                            label="Men's Examples",
-                            elem_classes="example-item"
+                            label="Men's Examples"
                         )
                         women_exm = gr.Examples(
                             examples=[
@@ -444,8 +443,7 @@ def app_gradio():
                             ],
                             examples_per_page=4,
                             inputs=image_path,
-                            label="Women's Examples",
-                            elem_classes="example-item"
+                            label="Women's Examples"
                         )
                         gr.Markdown(
                             '<div class="info-text">Model examples courtesy of <a href="https://huggingface.co/spaces/levihsu/OOTDiffusion">OOTDiffusion</a> and <a href="https://www.outfitanyone.org">OutfitAnyone</a></div>'
@@ -460,8 +458,7 @@ def app_gradio():
                             ],
                             examples_per_page=4,
                             inputs=cloth_image,
-                            label="Upper Garments",
-                            elem_classes="example-item"
+                            label="Upper Garments"
                         )
                         condition_overall_exm = gr.Examples(
                             examples=[
@@ -470,8 +467,7 @@ def app_gradio():
                             ],
                             examples_per_page=4,
                             inputs=cloth_image,
-                            label="Full Outfits",
-                            elem_classes="example-item"
+                            label="Full Outfits"
                         )
                         condition_person_exm = gr.Examples(
                             examples=[
@@ -480,8 +476,7 @@ def app_gradio():
                             ],
                             examples_per_page=4,
                             inputs=cloth_image,
-                            label="Reference Styles",
-                            elem_classes="example-item"
+                            label="Reference Styles"
                         )
                         gr.Markdown(
                             '<div class="info-text">Clothing examples sourced from various online retailers</div>'
