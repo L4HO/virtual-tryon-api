@@ -134,7 +134,5 @@ else:
 
 자세한 내용은 [라이선스 원문](https://creativecommons.org/licenses/by-nc/4.0/deed.ko)을 참고해주세요.
 
-```
-```
 
 [cc-by-nc]: https://www.google.com/search?q=%5Bhttps://creativecommons.org/licenses/by-nc/4.0/deed.ko%5D\(https://creativecommons.org/licenses/by-nc/4.0/deed.ko\)
