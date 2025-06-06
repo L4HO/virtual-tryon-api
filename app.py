@@ -1,17 +1,33 @@
 import argparse
 import os
-os.environ['CUDA_HOME'] = '/usr/local/cuda'
-os.environ['PATH'] = os.environ['PATH'] + ':/usr/local/cuda/bin'
+# Windows 환경에서는 아래 두 줄을 주석 처리하는 것이 일반적입니다.
+# os.environ['CUDA_HOME'] = '/usr/local/cuda'
+# os.environ['PATH'] = os.environ['PATH'] + ':/usr/local/cuda/bin'
 from datetime import datetime
 
 import gradio as gr
-import spaces
+# import spaces # <--- 이 라인이 있다면 반드시 주석 처리하거나 삭제해야 합니다!
 import numpy as np
 import torch
+
+# spaces 모듈이 없을 경우를 위한 더미(dummy) 클래스 정의
+try:
+    import spaces
+except ImportError:
+    print("로컬 환경에서 실행 중: 'spaces' 모듈을 위한 더미(dummy) 객체를 사용합니다.")
+    class DummySpaces:
+        def __init__(self):
+            pass
+        def GPU(self, *args, **kwargs): # @spaces.GPU 데코레이터를 위한 더미 메서드
+            def decorator(func):
+                return func
+            return decorator
+    spaces = DummySpaces() # spaces 라는 이름으로 더미 객체 할당
+
 from diffusers.image_processor import VaeImageProcessor
 from huggingface_hub import snapshot_download
 from PIL import Image
-torch.jit.script = lambda f: f
+torch.jit.script = lambda f: f # type: ignore
 from model.cloth_masker import AutoMasker, vis_mask
 from model.pipeline import CatVTONPipeline
 from utils import init_weight_dtype, resize_and_crop, resize_and_padding
@@ -19,480 +35,157 @@ from utils import init_weight_dtype, resize_and_crop, resize_and_padding
 def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
     parser.add_argument(
-        "--base_model_path",
-        type=str,
-        default="booksforcharlie/stable-diffusion-inpainting",
-        help=(
-            "The path to the base model to use for evaluation. This can be a local path or a model identifier from the Model Hub."
-        ),
-    )
+        "--base_model_path", type=str, default="booksforcharlie/stable-diffusion-inpainting",
+        help="The path to the base model to use for evaluation.")
     parser.add_argument(
-        "--resume_path",
-        type=str,
-        default="zhengchong/CatVTON",
-        help=(
-            "The Path to the checkpoint of trained tryon model."
-        ),
-    )
+        "--resume_path", type=str, default="zhengchong/CatVTON",
+        help="The Path to the checkpoint of trained tryon model.")
     parser.add_argument(
-        "--output_dir",
-        type=str,
-        default="resource/demo/output",
-        help="The output directory where the model predictions will be written.",
-    )
-    parser.add_argument(
-        "--width",
-        type=int,
-        default=768,
-        help=(
-            "The resolution for input images, all the images in the train/validation dataset will be resized to this"
-            " resolution"
-        ),
-    )
-    parser.add_argument(
-        "--height",
-        type=int,
-        default=1024,
-        help=(
-            "The resolution for input images, all the images in the train/validation dataset will be resized to this"
-            " resolution"
-        ),
-    )
-    parser.add_argument(
-        "--repaint",
-        action="store_true",
-        help="Whether to repaint the result image with the original background."
-    )
-    parser.add_argument(
-        "--allow_tf32",
-        action="store_true",
-        default=True,
-        help=(
-            "Whether or not to allow TF32 on Ampere GPUs. Can be used to speed up training. For more information, see"
-            " https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices"
-        ),
-    )
-    parser.add_argument(
-        "--mixed_precision",
-        type=str,
-        default="bf16",
-        choices=["no", "fp16", "bf16"],
-        help=(
-            "Whether to use mixed precision. Choose between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >="
-            " 1.10 and an Nvidia Ampere GPU.  Default to the value of accelerate config of the current system or the"
-            " flag passed with the `accelerate.launch` command. Use this argument to override the accelerate config."
-        ),
-    )
-
-    args = parser.parse_args()
+        "--output_dir", type=str, default="resource/demo/output",
+        help="The output directory where the model predictions will be written.")
+    parser.add_argument("--width", type=int, default=768)
+    parser.add_argument("--height", type=int, default=1024)
+    parser.add_argument("--repaint", action="store_true")
+    parser.add_argument("--allow_tf32", action="store_true", default=True)
+    parser.add_argument("--mixed_precision", type=str, default="bf16", choices=["no", "fp16", "bf16"])
+    parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
+    args, unknown = parser.parse_known_args([])
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
-    if env_local_rank != -1 and env_local_rank != args.local_rank:
+    if hasattr(args, 'local_rank') and env_local_rank != -1 and args.local_rank == -1 :
         args.local_rank = env_local_rank
-
+    elif not hasattr(args, 'local_rank'):
+        args.local_rank = env_local_rank
     return args
 
 def image_grid(imgs, rows, cols):
     assert len(imgs) == rows * cols
-
     w, h = imgs[0].size
     grid = Image.new("RGB", size=(cols * w, rows * h))
-
     for i, img in enumerate(imgs):
         grid.paste(img, box=(i % cols * w, i // cols * h))
     return grid
 
 args = parse_args()
-repo_path = snapshot_download(repo_id=args.resume_path)
+# 아래 모델 로딩 부분은 Gradio UI 테스트 중에는 시간이 오래 걸릴 수 있으므로,
+# 필요하다면 임시로 주석 처리하고 테스트할 수 있습니다.
+# 하지만 UI 초기화 오류는 이 부분과 직접적인 관련이 없을 가능성이 높습니다.
+# print("모델 로딩 시작...")
+# repo_path = snapshot_download(repo_id=args.resume_path)
+# pipeline = CatVTONPipeline(
+#     base_ckpt=args.base_model_path,
+#     attn_ckpt=repo_path,
+#     attn_ckpt_version="mix",
+#     weight_dtype=init_weight_dtype(args.mixed_precision),
+#     use_tf32=args.allow_tf32,
+#     device='cuda'
+# )
+# mask_processor = VaeImageProcessor(
+#     vae_scale_factor=8,
+#     do_normalize=False,
+#     do_binarize=True,
+#     do_convert_grayscale=True
+# )
+# automasker = AutoMasker(
+#     densepose_ckpt=os.path.join(repo_path, "DensePose"),
+#     schp_ckpt=os.path.join(repo_path, "SCHP"),
+#     device='cuda',
+# )
+# print("모델 로딩 완료.")
 
-# Pipeline
-pipeline = CatVTONPipeline(
-    base_ckpt=args.base_model_path,
-    attn_ckpt=repo_path,
-    attn_ckpt_version="mix",
-    weight_dtype=init_weight_dtype(args.mixed_precision),
-    use_tf32=args.allow_tf32,
-    device='cuda'
-)
-
-# AutoMasker
-mask_processor = VaeImageProcessor(
-    vae_scale_factor=8,
-    do_normalize=False,
-    do_binarize=True,
-    do_convert_grayscale=True
-)
-automasker = AutoMasker(
-    densepose_ckpt=os.path.join(repo_path, "DensePose"),
-    schp_ckpt=os.path.join(repo_path, "SCHP"),
-    device='cuda',
-)
-
-@spaces.GPU(duration=120)
+# 실제 submit_function은 일단 그대로 둡니다. (Minimal UI에서는 호출되지 않음)
+@spaces.GPU(duration=120) # type: ignore
 def submit_function(
-    person_image,
-    cloth_image,
-    cloth_type,
-    num_inference_steps,
-    guidance_scale,
-    seed,
-    show_type
+    person_image_input, cloth_image_path, cloth_type,
+    num_inference_steps, guidance_scale, seed, show_type
 ):
-    # person_image 객체에서 background와 layers[0]을 분리
-    person_image, mask = person_image["background"], person_image["layers"][0]
-    mask = Image.open(mask).convert("L")
+    # ... (기존 submit_function 내용) ...
+    # 이 함수는 아래 minimal_app_gradio에서는 직접 사용되지 않습니다.
+    print("실제 submit_function 호출됨 (이 메시지는 minimal 테스트에서는 보이지 않아야 함)")
+    person_image_filepath = person_image_input["background"]
+    mask_filepath = person_image_input["layers"][0] if person_image_input["layers"] else None
 
-    # 만약 마스크가 전부 0(검정)이면 None 처리
-    if len(np.unique(np.array(mask))) == 1:
-        mask = None
-    else:
-        mask = np.array(mask)
-        mask[mask > 0] = 255
-        mask = Image.fromarray(mask)
+    if mask_filepath:
+        mask = Image.open(mask_filepath).convert("L")
+        if np.all(np.array(mask) == 0): mask = None
+        else:
+            mask_array = np.array(mask); mask_array[mask_array > 0] = 255; mask = Image.fromarray(mask_array)
+    else: mask = None
 
     tmp_folder = args.output_dir
     date_str = datetime.now().strftime("%Y%m%d%H%M%S")
     result_save_path = os.path.join(tmp_folder, date_str[:8], date_str[8:] + ".png")
-    if not os.path.exists(os.path.join(tmp_folder, date_str[:8])):
-        os.makedirs(os.path.join(tmp_folder, date_str[:8]))
+    if not os.path.exists(os.path.join(tmp_folder, date_str[:8])): os.makedirs(os.path.join(tmp_folder, date_str[:8]))
 
     generator = None
-    if seed != -1:
-        generator = torch.Generator(device='cuda').manual_seed(seed)
+    if seed != -1: generator = torch.Generator(device='cuda').manual_seed(int(seed))
 
-    person_image = Image.open(person_image).convert("RGB")
-    cloth_image = Image.open(cloth_image).convert("RGB")
+    person_image = Image.open(person_image_filepath).convert("RGB")
+    cloth_image = Image.open(cloth_image_path).convert("RGB")
     person_image = resize_and_crop(person_image, (args.width, args.height))
     cloth_image = resize_and_padding(cloth_image, (args.width, args.height))
 
-    # If user didn't draw a mask
-    if mask is not None:
-        mask = resize_and_crop(mask, (args.width, args.height))
+    if mask is not None: mask = resize_and_crop(mask, (args.width, args.height))
     else:
-        mask = automasker(
-            person_image,
-            cloth_type
-        )['mask']
-    mask = mask_processor.blur(mask, blur_factor=9)
+        print("마스크가 제공되지 않았거나 유효하지 않아 AutoMasker를 사용합니다.")
+        mask = automasker(person_image,cloth_type)['mask'] # type: ignore
+    mask = mask_processor.blur(mask, blur_factor=9) # type: ignore
 
-    # Inference
-    result_image = pipeline(
-        image=person_image,
-        condition_image=cloth_image,
-        mask=mask,
-        num_inference_steps=num_inference_steps,
-        guidance_scale=guidance_scale,
-        generator=generator
-    )[0]
+    # result_image = pipeline( # type: ignore
+    #     image=person_image, condition_image=cloth_image, mask=mask,
+    #     num_inference_steps=int(num_inference_steps), guidance_scale=float(guidance_scale), generator=generator
+    # )[0]
+    # 임시로 반환값 설정 (pipeline 호출 주석 처리 시)
+    result_image = Image.new("RGB", (args.width, args.height), color="gray")
 
-    # Post-process & Save
-    masked_person = vis_mask(person_image, mask)
+
+    masked_person = vis_mask(person_image, mask) # type: ignore
     save_result_image = image_grid([person_image, masked_person, cloth_image, result_image], 1, 4)
     save_result_image.save(result_save_path)
 
-    if show_type == "result only":
-        return result_image
+    if show_type == "result only": return result_image
     else:
-        width, height = person_image.size
-        if show_type == "input & result":
-            condition_width = width // 2
-            conditions = image_grid([person_image, cloth_image], 2, 1)
-        else:
-            condition_width = width // 3
-            conditions = image_grid([person_image, masked_person, cloth_image], 3, 1)
-
-        conditions = conditions.resize((condition_width, height), Image.NEAREST)
-        new_result_image = Image.new("RGB", (width + condition_width + 5, height))
-        new_result_image.paste(conditions, (0, 0))
-        new_result_image.paste(result_image, (condition_width + 5, 0))
+        display_width, display_height = person_image.size
+        if show_type == "input & result": condition_width = display_width // 2; conditions = image_grid([person_image, cloth_image], 2, 1)
+        else: condition_width = display_width // 3; conditions = image_grid([person_image, masked_person, cloth_image], 3, 1)
+        conditions = conditions.resize((condition_width, display_height), Image.Resampling.NEAREST)
+        new_result_image = Image.new("RGB", (display_width + condition_width + 5, display_height))
+        new_result_image.paste(conditions, (0, 0)); new_result_image.paste(result_image, (condition_width + 5, 0))
         return new_result_image
 
-def person_example_fn(image_path):
-    return image_path
+def person_example_fn(image_path_from_example):
+    return image_path_from_example
 
 # Custom CSS
-css = """
-footer {visibility: hidden}
+css = """ footer {visibility: hidden} """ # CSS 간소화 (테스트 목적)
 
-/* Main container styling */
-.gradio-container {
-    background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-    border-radius: 20px;
-    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.15);
-}
-
-/* Header styling */
-h1, h2, h3 {
-    color: #2c3e50;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
-}
-
-/* Button styling */
-button.primary-button {
-    background: linear-gradient(45deg, #4CAF50, #45a049);
-    border: none;
-    border-radius: 10px;
-    color: white;
-    padding: 12px 24px;
-    font-weight: bold;
-    transition: all 0.3s ease;
-    box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);
-}
-
-button.primary-button:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
-}
-
-/* Image container styling */
-.image-container {
-    border-radius: 15px;
-    overflow: hidden;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-    transition: transform 0.3s ease;
-}
-
-.image-container:hover {
-    transform: scale(1.02);
-}
-
-/* Radio button styling */
-.radio-group label {
-    background-color: #ffffff;
-    border-radius: 8px;
-    padding: 10px 15px;
-    margin: 5px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.radio-group input:checked + label {
-    background-color: #4CAF50;
-    color: white;
-}
-
-/* Slider styling */
-.slider-container {
-    background: white;
-    padding: 15px;
-    border-radius: 10px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-}
-
-.slider {
-    height: 8px;
-    border-radius: 4px;
-    background: #e0e0e0;
-}
-
-.slider .thumb {
-    width: 20px;
-    height: 20px;
-    background: #4CAF50;
-    border-radius: 50%;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-}
-
-/* Alert/warning text styling */
-.warning-text {
-    color: #ff5252;
-    font-weight: bold;
-    text-align: center;
-    padding: 10px;
-    background: rgba(255,82,82,0.1);
-    border-radius: 8px;
-    margin: 10px 0;
-}
-
-/* Example gallery styling */
-.example-gallery {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 15px;
-    padding: 15px;
-    background: white;
-    border-radius: 10px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-}
-
-.example-item {
-    border-radius: 8px;
-    overflow: hidden;
-    transition: transform 0.3s ease;
-}
-
-.example-item:hover {
-    transform: scale(1.05);
-}
-"""
-
+# --- 매우 단순화된 app_gradio 함수 ---
 def app_gradio():
-    with gr.Blocks(theme=gr.themes.Soft(primary_hue="green", secondary_hue="blue"), css=css) as demo:
-        gr.Markdown(
-            """
-            # 👔 Fashion Fit 
-            Transform your look with AI-powered virtual clothing try-on!
-            """
-        )
+    with gr.Blocks(theme=gr.themes.Soft(primary_hue="green", secondary_hue="blue"), css=css) as demo: # type: ignore
+        gr.Markdown("# 👔 Fashion Fit (Minimal Test)")
 
         with gr.Row():
-            with gr.Column(scale=1, min_width=350):
-                with gr.Group():
-                    gr.Markdown("### 📸 Upload Images")
-                    with gr.Row():
-                        image_path = gr.Image(
-                            type="filepath",
-                            interactive=True,
-                            visible=False,
-                        )
-                        person_image = gr.ImageEditor(
-                            interactive=True,
-                            label="Person Image",
-                            type="filepath",
-                            elem_classes="image-container"
-                        )
+            with gr.Column():
+                gr.Markdown("### Test Input")
+                input_text = gr.Textbox(label="Test Input Textbox") # 아주 간단한 컴포넌트
+                test_button = gr.Button("Minimal Test Button") # type: ignore
+            with gr.Column():
+                gr.Markdown("### Test Output")
+                output_text = gr.Textbox(label="Test Output Textbox")
 
-                    with gr.Row():
-                        with gr.Column(scale=1, min_width=230):
-                            cloth_image = gr.Image(
-                                interactive=True,
-                                label="Clothing Item",
-                                type="filepath",
-                                elem_classes="image-container"
-                            )
-                        with gr.Column(scale=1, min_width=120):
- 
-                            cloth_type = gr.Radio(
-                                label="Clothing Type",
-                                choices=["upper", "lower", "overall"],
-                                value="upper",
-                                elem_classes="radio-group"
-                            )
+        def minimal_test_func(text):
+            print(f"Minimal test function called with: {text}")
+            return f"Processed: {text}"
 
-                submit = gr.Button("🚀 Generate Try-On", elem_classes="primary-button")
-
-
-                with gr.Accordion("⚙️ Advanced Settings", open=False):
-                    num_inference_steps = gr.Slider(
-                        label="Quality Level",
-                        minimum=10,
-                        maximum=100,
-                        step=5,
-                        value=50,
-                        elem_classes="slider-container"
-                    )
-                    guidance_scale = gr.Slider(
-                        label="Style Strength",
-                        minimum=0.0,
-                        maximum=7.5,
-                        step=0.5,
-                        value=2.5,
-                        elem_classes="slider-container"
-                    )
-                    seed = gr.Slider(
-                        label="Random Seed",
-                        minimum=-1,
-                        maximum=10000,
-                        step=1,
-                        value=42,
-                        elem_classes="slider-container"
-                    )
-                    show_type = gr.Radio(
-                        label="Display Mode",
-                        choices=["result only", "input & result", "input & mask & result"],
-                        value="input & mask & result",
-                        elem_classes="radio-group"
-                    )
-
-            with gr.Column(scale=2, min_width=500):
-                result_image = gr.Image(
-                    interactive=False,
-                    label="Final Result",
-                    elem_classes="image-container"
-                )
-                with gr.Row():
-                    root_path = "resource/demo/example"
-                    with gr.Column():
-                        gr.Markdown("#### 👤 Model Examples")
-                        # elem_classes 인자를 제거해야 오류가 사라집니다.
-                        men_exm = gr.Examples(
-                            examples=[
-                                os.path.join(root_path, "person", "men", file)
-                                for file in os.listdir(os.path.join(root_path, "person", "men"))
-                            ],
-                            examples_per_page=4,
-                            inputs=image_path,
-                            label="Men's Examples"
-                        )
-                        women_exm = gr.Examples(
-                            examples=[
-                                os.path.join(root_path, "person", "women", file)
-                                for file in os.listdir(os.path.join(root_path, "person", "women"))
-                            ],
-                            examples_per_page=4,
-                            inputs=image_path,
-                            label="Women's Examples"
-                        )
-                        gr.Markdown(
-                            '<div class="info-text">Model examples courtesy of <a href="https://huggingface.co/spaces/levihsu/OOTDiffusion">OOTDiffusion</a> and <a href="https://www.outfitanyone.org">OutfitAnyone</a></div>'
-                        )
-
-                    with gr.Column():
-                        gr.Markdown("#### 👕 Clothing Examples")
-                        condition_upper_exm = gr.Examples(
-                            examples=[
-                                os.path.join(root_path, "condition", "upper", file)
-                                for file in os.listdir(os.path.join(root_path, "condition", "upper"))
-                            ],
-                            examples_per_page=4,
-                            inputs=cloth_image,
-                            label="Upper Garments"
-                        )
-                        condition_overall_exm = gr.Examples(
-                            examples=[
-                                os.path.join(root_path, "condition", "overall", file)
-                                for file in os.listdir(os.path.join(root_path, "condition", "overall"))
-                            ],
-                            examples_per_page=4,
-                            inputs=cloth_image,
-                            label="Full Outfits"
-                        )
-                        condition_person_exm = gr.Examples(
-                            examples=[
-                                os.path.join(root_path, "condition", "person", file)
-                                for file in os.listdir(os.path.join(root_path, "condition", "person"))
-                            ],
-                            examples_per_page=4,
-                            inputs=cloth_image,
-                            label="Reference Styles"
-                        )
-                        gr.Markdown(
-                            '<div class="info-text">Clothing examples sourced from various online retailers</div>'
-                        )
-
-            image_path.change(
-                person_example_fn,
-                inputs=image_path,
-                outputs=person_image
-            )
-
-            submit.click(
-                submit_function,
-                [
-                    person_image,
-                    cloth_image,
-                    cloth_type,
-                    num_inference_steps,
-                    guidance_scale,
-                    seed,
-                    show_type,
-                ],
-                result_image,
-            )
-
-
+        test_button.click(
+            minimal_test_func,
+            inputs=[input_text],
+            outputs=[output_text]
+        )
 
     demo.queue().launch(share=True, show_error=True)
+# --- 여기까지 매우 단순화된 app_gradio 함수 ---
 
 if __name__ == "__main__":
+    # 모델 로딩을 app_gradio 호출 전에 할지, 혹은 Gradio 내부에서 할지 결정할 수 있습니다.
+    # UI 초기화 오류 디버깅 중이므로, 일단은 app_gradio()만 호출합니다.
     app_gradio()
