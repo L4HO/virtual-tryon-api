@@ -1,6 +1,4 @@
-import argparse
 import os
-from datetime import datetime
 import io
 import logging
 from typing import Union, Optional
@@ -15,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from diffusers.image_processor import VaeImageProcessor
 from huggingface_hub import snapshot_download
 
+# Assuming these are in your project structure, e.g., in a 'model' directory
 from model.cloth_masker import AutoMasker
 from model.pipeline import CatVTONPipeline
 from utils import init_weight_dtype, resize_and_crop, resize_and_padding
@@ -31,7 +30,7 @@ CONFIG = {
     "width": 768,
     "height": 1024,
     "allow_tf32": True,
-    "mixed_precision": "bf16",
+    "mixed_precision": "bf16", # 또는 "fp16" 또는 "no" (GPU 호환성에 따라)
     "device": 'cuda' if torch.cuda.is_available() else 'cpu'
 }
 
@@ -52,27 +51,37 @@ async def load_models_on_startup():
         logger.info(f"FastAPI 결과 저장 폴더 생성: {CONFIG['output_dir_fastapi']}")
 
     try:
+        # Hugging Face Hub에서 모델 가중치 다운로드
         repo_path = snapshot_download(repo_id=CONFIG["resume_path"])
         logger.info(f"리포지토리 다운로드 완료: {repo_path}")
 
         logger.info("모델 로딩 중...")
+        # pipeline_model 초기화
         pipeline_model = CatVTONPipeline(
-            base_ckpt=CONFIG["base_model_path"], attn_ckpt=repo_path, attn_ckpt_version="mix",
+            base_ckpt=CONFIG["base_model_path"],
+            attn_ckpt=repo_path,
+            attn_ckpt_version="mix",
             weight_dtype=init_weight_dtype(CONFIG["mixed_precision"]),
-            use_tf32=CONFIG["allow_tf32"], device=CONFIG["device"]
+            use_tf32=CONFIG["allow_tf32"],
+            device=CONFIG["device"]
         )
+        # mask_processor_model 초기화
         mask_processor_model = VaeImageProcessor(
             vae_scale_factor=8, do_normalize=False, do_binarize=True, do_convert_grayscale=True
         )
+        # automasker_model 초기화
         automasker_model = AutoMasker(
             densepose_ckpt=os.path.join(repo_path, "DensePose"),
-            schp_ckpt=os.path.join(repo_path, "SCHP"), device=CONFIG["device"],
+            schp_ckpt=os.path.join(repo_path, "SCHP"),
+            device=CONFIG["device"],
         )
         logger.info("모든 모델이 성공적으로 로드되었습니다.")
     except Exception as e:
         logger.error(f"모델 로딩 중 심각한 오류 발생: {e}", exc_info=True)
+        # 모델 로딩 실패 시 애플리케이션 시작을 중단할 수도 있습니다.
+        # raise e # 필요시 이 라인을 활성화하여 서버 시작 실패
 
-# --- 핵심 로직을 담은 헬퍼 함수 (리팩토링) ---
+# --- 핵심 로직을 담은 헬퍼 함수 ---
 def run_single_tryon(
     person_pil: Image.Image,
     cloth_pil: Image.Image,
@@ -86,7 +95,15 @@ def run_single_tryon(
     """한 번의 가상 착용을 수행하는 핵심 함수"""
 
     if not pipeline_model or not automasker_model or not mask_processor_model:
-        raise RuntimeError("모델이 로드되지 않았습니다.")
+        raise RuntimeError("모델이 로드되지 않았습니다. 애플리케이션 시작을 확인하세요.")
+
+    # 모델을 평가 모드 (eval())로 설정
+    pipeline_model.unet.eval()
+    if hasattr(pipeline_model, 'vae') and pipeline_model.vae:
+        pipeline_model.vae.eval()
+    if hasattr(pipeline_model, 'scheduler') and pipeline_model.scheduler:
+        pass # 현재는 아무것도 하지 않습니다.
+
 
     # 이미지 리사이징 및 패딩
     person_pil = resize_and_crop(person_pil, (CONFIG["width"], CONFIG["height"]))
@@ -114,16 +131,17 @@ def run_single_tryon(
     if seed != -1:
         generator = torch.Generator(device=CONFIG["device"]).manual_seed(seed)
 
-    # 추론 실행
+    # 추론 실행 (torch.no_grad()로 감싸서 메모리 및 속도 최적화)
     logger.info(f"추론 시작: cloth_type='{cloth_type}', steps={num_inference_steps}, guidance={guidance_scale}")
-    result_image_pil = pipeline_model( # type: ignore
-        image=person_pil,
-        condition_image=cloth_pil,
-        mask=final_mask,
-        num_inference_steps=num_inference_steps,
-        guidance_scale=guidance_scale,
-        generator=generator
-    )[0]
+    with torch.no_grad(): # 그래디언트 계산 비활성화
+        result_image_pil = pipeline_model( # type: ignore
+            image=person_pil,
+            condition_image=cloth_pil,
+            mask=final_mask,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            generator=generator
+        )[0]
     logger.info("추론 완료.")
     return result_image_pil
 
@@ -139,6 +157,11 @@ async def virtual_tryon_outfit_endpoint(
 ):
     logger.info("상/하의 전체 착용 요청 수신.")
     try:
+        # 요청 처리 시작 전 GPU 메모리 캐시 비우기 (초기 요청 성능 최적화)
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            logger.info("GPU 메모리 캐시 비우기 완료 (요청 시작 전).")
+
         # 1. 모든 이미지 파일 읽기
         person_bytes = await person_image_file.read()
         upper_bytes = await upper_garment_file.read()
@@ -161,14 +184,23 @@ async def virtual_tryon_outfit_endpoint(
         )
         logger.info("--- 1단계: 상의 적용 완료 ---")
 
+        # 상의 적용 후 GPU 메모리 캐시 명시적 비우기
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            logger.info("GPU 메모리 캐시 비우기 완료 (상의 적용 후).")
+
         # 3. 하의 적용
         logger.info("--- 2단계: 하의 적용 시작 ---")
         final_outfit_pil = run_single_tryon(
             person_pil=image_with_top_pil, # 이전 단계의 결과 이미지를 입력으로 사용
             cloth_pil=lower_pil,
             cloth_type="lower",
-            # 중요: 마스크 생성 시에는 '원본 사람 이미지'를 기준으로 사용
-            person_pil_for_mask=original_person_pil.copy(),
+            # 중요: 하의 마스크 생성 시에는 '원본 사람 이미지'를 기준으로 사용해야 함
+            # 이는 AIStylistFront\AIStylist\Backend 프로젝트의 특성에 따라 결정될 수 있습니다.
+            # 만약 상의를 입은 상태의 사람 이미지로 하의 마스크를 생성해야 한다면,
+            # original_person_pil.copy() 대신 image_with_top_pil.copy()를 사용해야 합니다.
+            # 현재 코드상으로는 원본 사람 이미지를 사용하므로, 그대로 둡니다.
+            person_pil_for_mask=image_with_top_pil.copy(),
             num_inference_steps=num_inference_steps,
             guidance_scale=guidance_scale,
             seed=seed
@@ -188,7 +220,7 @@ async def virtual_tryon_outfit_endpoint(
         logger.error(f"전체 착용 처리 중 오류 발생: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"이미지 처리 중 서버 내부 오류: {str(e)}")
 
-# --- 기존 엔드포인트: 단일 아이템 적용 (수정됨) ---
+# --- 기존 엔드포인트: 단일 아이템 적용 ---
 @app.post("/virtual-tryon/")
 async def virtual_tryon_endpoint(
     person_image_file: UploadFile = File(..., description="사람 이미지 파일"),
@@ -201,6 +233,11 @@ async def virtual_tryon_endpoint(
 ):
     logger.info(f"단일 착용 요청 수신 (cloth_type: {cloth_type}).")
     try:
+        # 요청 처리 시작 전 GPU 메모리 캐시 비우기 (초기 요청 성능 최적화)
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            logger.info("GPU 메모리 캐시 비우기 완료 (단일 착용 요청 시작 전).")
+
         person_bytes = await person_image_file.read()
         cloth_bytes = await cloth_image_file.read()
         person_pil = Image.open(io.BytesIO(person_bytes)).convert("RGB")
